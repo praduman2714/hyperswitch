@@ -1,0 +1,23 @@
+[[connectors]]
+name = "stripe"
+base_fee_usd = 0.30
+percent_fee  = 0.029
+supported_currencies = ["USD", "EUR", "GBP"]
+supported_bin_prefixes = []
+
+[[connectors]]
+name = "razorpay"
+base_fee_usd = 0.00
+percent_fee  = 0.020
+supported_currencies = ["INR"]
+supported_bin_prefixes = ["508", "607"]
+
+[[connectors]]
+name = "adyen"
+base_fee_usd = 0.12
+percent_fee  = 0.025
+supported_currencies = ["USD", "EUR", "GBP", "INR"]
+supported_bin_prefixes = []
+
+[settings]
+min_success_rate = 0.80
