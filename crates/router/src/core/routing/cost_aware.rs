@@ -36,3 +36,35 @@ pub enum RoutingError {
     NoEligibleConnector(String),
     ConfigLoadError(String),
 }
+
+pub fn calculate_estimated_cost_usd(
+    base_fee_usd: f64,
+    percent_fee: f64,
+    amount_in_usd: f64,
+) -> f64 {
+    base_fee_usd + (percent_fee * amount_in_usd)
+}
+
+pub fn bin_matches_connector(connector: &ConnectorCostConfig, card_bin: &str) -> bool {
+    connector.supported_bin_prefixes.is_empty()
+        || connector
+            .supported_bin_prefixes
+            .iter()
+            .any(|prefix| card_bin.starts_with(prefix))
+}
+
+pub fn connector_supports_currency(connector: &ConnectorCostConfig, currency: &str) -> bool {
+    connector
+        .supported_currencies
+        .iter()
+        .any(|supported_currency| supported_currency.eq_ignore_ascii_case(currency))
+}
+
+pub fn mock_success_rate(connector_name: &str) -> f64 {
+    match connector_name.to_ascii_lowercase().as_str() {
+        "stripe" => 0.95,
+        "razorpay" => 0.88,
+        "adyen" => 0.72,
+        _ => 0.85,
+    }
+}
