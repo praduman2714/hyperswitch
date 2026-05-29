@@ -108,6 +108,7 @@ pub use crate::{
 };
 use crate::{
     configs::{secrets_transformers, Settings},
+    core::routing::cost_aware_store::CostAwareRoutingStore,
     db::kafka_store::{KafkaStore, TenantID},
     routes::{hypersense as hypersense_routes, three_ds_decision_rule},
 };
@@ -143,6 +144,7 @@ pub struct SessionState {
     pub infra_components: Option<serde_json::Value>,
     pub enhancement: Option<HashMap<String, String>>,
     pub superposition_service: Arc<SuperpositionClient>,
+    pub cost_aware_routing_store: CostAwareRoutingStore,
 }
 impl scheduler::SchedulerSessionState for SessionState {
     fn get_db(&self) -> Box<dyn SchedulerInterface> {
@@ -341,6 +343,7 @@ pub struct AppState {
     pub infra_components: Option<serde_json::Value>,
     pub enhancement: Option<HashMap<String, String>>,
     pub superposition_service: Arc<SuperpositionClient>,
+    pub cost_aware_routing_store: CostAwareRoutingStore,
 }
 impl scheduler::SchedulerAppState for AppState {
     fn get_tenants(&self) -> Vec<id_type::TenantId> {
@@ -539,6 +542,7 @@ impl AppState {
                 infra_components: infra_component_values,
                 enhancement,
                 superposition_service,
+                cost_aware_routing_store: CostAwareRoutingStore::new(),
             }
         })
         .await
@@ -672,6 +676,7 @@ impl AppState {
             infra_components: self.infra_components.clone(),
             enhancement: self.enhancement.clone(),
             superposition_service: self.superposition_service.clone(),
+            cost_aware_routing_store: self.cost_aware_routing_store.clone(),
         })
     }
 
@@ -970,6 +975,10 @@ impl Payments {
                 .service(
                     web::resource("/sync")
                         .route(web::post().to(payments::payments_retrieve_with_gateway_creds)),
+                )
+                .service(
+                    web::resource("/{payment_id}/routing-trace")
+                        .route(web::get().to(payments::payments_routing_trace)),
                 )
                 .service(
                     web::resource("/{payment_id}")

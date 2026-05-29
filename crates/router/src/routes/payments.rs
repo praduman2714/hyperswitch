@@ -3,7 +3,7 @@ use crate::{
     services::authorization::permissions::Permission,
 };
 pub mod helpers;
-use actix_web::{web, Responder};
+use actix_web::{web, HttpResponse, Responder};
 use error_stack::report;
 use hyperswitch_domain_models::{ext_traits::OptionExt, payments::HeaderPayload};
 #[cfg(feature = "v1")]
@@ -693,6 +693,26 @@ pub async fn payments_retrieve(
         locking_action,
     ))
     .await
+}
+
+#[cfg(feature = "v1")]
+#[instrument(skip(state), fields(flow = ?Flow::PaymentsRetrieve, payment_id))]
+pub async fn payments_routing_trace(
+    state: web::Data<app::AppState>,
+    path: web::Path<common_utils::id_type::PaymentId>,
+) -> impl Responder {
+    let payment_id = path.into_inner();
+    let payment_id = payment_id.get_string_repr();
+    tracing::Span::current().record("payment_id", payment_id);
+
+    match state.cost_aware_routing_store.get(payment_id) {
+        Ok(Some(decision)) => HttpResponse::Ok().json(decision),
+        Ok(None) => HttpResponse::NotFound().body("routing trace not found for this payment"),
+        Err(error) => {
+            logger::error!(?error, "failed to read cost-aware routing trace store");
+            HttpResponse::InternalServerError().body("failed to read routing trace")
+        }
+    }
 }
 
 #[cfg(feature = "v1")]
