@@ -1,4 +1,5 @@
 pub mod cost_aware;
+pub mod cost_aware_store;
 pub mod helpers;
 pub mod transformers;
 use std::collections::HashSet;
