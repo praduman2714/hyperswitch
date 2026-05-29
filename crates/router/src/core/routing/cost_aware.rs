@@ -68,3 +68,74 @@ pub fn mock_success_rate(connector_name: &str) -> f64 {
         _ => 0.85,
     }
 }
+
+pub fn select_connector(
+    config: &CostRoutingConfig,
+    card_bin: &str,
+    currency: &str,
+    amount_in_usd: f64,
+) -> Result<RoutingDecision, RoutingError> {
+    let eligible_connectors = config
+        .connectors
+        .iter()
+        .filter(|connector| connector_supports_currency(connector, currency))
+        .filter(|connector| bin_matches_connector(connector, card_bin))
+        .collect::<Vec<_>>();
+
+    if eligible_connectors.is_empty() {
+        return Err(RoutingError::NoEligibleConnector(format!(
+            "No connector supports currency {currency} and BIN {card_bin}"
+        )));
+    }
+
+    let all_candidates = eligible_connectors
+        .into_iter()
+        .map(|connector| {
+            let estimated_cost_usd = calculate_estimated_cost_usd(
+                connector.base_fee_usd,
+                connector.percent_fee,
+                amount_in_usd,
+            );
+            let success_rate = mock_success_rate(&connector.name);
+            let excluded_reason = (success_rate < config.min_success_rate)
+                .then(|| "below_success_rate_floor".to_string());
+
+            RoutingCandidate {
+                name: connector.name.clone(),
+                estimated_cost_usd,
+                success_rate,
+                excluded_reason,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let passing_floor = all_candidates
+        .iter()
+        .filter(|candidate| candidate.success_rate >= config.min_success_rate)
+        .collect::<Vec<_>>();
+
+    let (selected_candidate, reason) = if let Some(candidate) = passing_floor
+        .iter()
+        .min_by(|left, right| left.estimated_cost_usd.total_cmp(&right.estimated_cost_usd))
+    {
+        (*candidate, "lowest_cost")
+    } else {
+        let fallback_candidate = all_candidates
+            .iter()
+            .min_by(|left, right| left.estimated_cost_usd.total_cmp(&right.estimated_cost_usd))
+            .ok_or_else(|| {
+                RoutingError::NoEligibleConnector(format!(
+                    "No connector supports currency {currency} and BIN {card_bin}"
+                ))
+            })?;
+
+        (fallback_candidate, "floor_fallback")
+    };
+
+    Ok(RoutingDecision {
+        selected: selected_candidate.name.clone(),
+        estimated_cost_usd: selected_candidate.estimated_cost_usd,
+        reason: reason.to_string(),
+        all_candidates,
+    })
+}
