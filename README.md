@@ -137,6 +137,26 @@ make cost-aware-test
 
 This runs the focused cost-aware tests and avoids compiling the full Hyperswitch router.
 
+## Load Test
+
+With the demo API running in one terminal:
+
+```bash
+make cost-aware-demo
+```
+
+Run the 100 RPS / 60 second load test in another terminal:
+
+```bash
+make cost-aware-loadtest
+```
+
+The load test prints `p99_ms` and exits non-zero if p99 is `>= 200ms` or if any request fails. For a quick local smoke check, use:
+
+```bash
+make cost-aware-loadtest seconds=3
+```
+
 ## Cost Config
 
 The cost config lives at `config/cost_routing.toml`.

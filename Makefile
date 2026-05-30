@@ -33,7 +33,7 @@ ROOT_DIR := $(realpath $(ROOT_DIR_WITH_SLASH))
 	rm \
 	release
 
-.PHONY: cost-aware-demo cost-aware-test
+.PHONY: cost-aware-demo cost-aware-test cost-aware-loadtest
 
 
 # Check a local package and all of its dependencies for errors
@@ -109,6 +109,14 @@ cost-aware-demo:
 #	make cost-aware-test
 cost-aware-test:
 	cargo test --offline --manifest-path tools/cost-aware-smoke/Cargo.toml cost_aware
+
+# Run a 100 RPS / 60s load test against the cost-aware demo API.
+#
+# Usage:
+#	make cost-aware-demo
+#	make cost-aware-loadtest [rps=100] [seconds=60]
+cost-aware-loadtest:
+	RPS=$(if $(rps),$(rps),100) DURATION_SECONDS=$(if $(seconds),$(seconds),60) cargo run --quiet --offline --manifest-path tools/cost-aware-smoke/Cargo.toml --bin loadtest
 
 
 # Next-generation test runner for Rust.

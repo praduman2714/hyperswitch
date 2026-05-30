@@ -33,6 +33,7 @@ Total: 88/100
 Bonus claimed:
 
 - Decision trace API endpoint shape: `GET /v1/payments/{payment_id}/routing-trace`.
+- Load test artifact: `make cost-aware-loadtest` sends 100 RPS for 60 seconds and fails if p99 is `>= 200ms`.
 
 What is broken or hacky:
 
