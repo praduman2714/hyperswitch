@@ -1,0 +1,106 @@
+{
+  "info": {
+    "name": "Cost-Aware Routing Demo",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create USD Routing Decision",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"payment_id\": \"pay_test_usd_123\",\n  \"card_bin\": \"424242\",\n  \"currency\": \"USD\",\n  \"amount_in_usd\": 100.0\n}"
+        },
+        "url": {
+          "raw": "http://localhost:9090/cost-aware/select",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "9090",
+          "path": [
+            "cost-aware",
+            "select"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Trace USD Routing Decision",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:9090/v1/payments/pay_test_usd_123/routing-trace",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "9090",
+          "path": [
+            "v1",
+            "payments",
+            "pay_test_usd_123",
+            "routing-trace"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Create INR Routing Decision",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"payment_id\": \"pay_test_inr_508\",\n  \"card_bin\": \"508999\",\n  \"currency\": \"INR\",\n  \"amount_in_usd\": 100.0\n}"
+        },
+        "url": {
+          "raw": "http://localhost:9090/cost-aware/select",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "9090",
+          "path": [
+            "cost-aware",
+            "select"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Trace INR Routing Decision",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:9090/v1/payments/pay_test_inr_508/routing-trace",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "9090",
+          "path": [
+            "v1",
+            "payments",
+            "pay_test_inr_508",
+            "routing-trace"
+          ]
+        }
+      }
+    }
+  ]
+}

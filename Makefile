@@ -33,6 +33,8 @@ ROOT_DIR := $(realpath $(ROOT_DIR_WITH_SLASH))
 	rm \
 	release
 
+.PHONY: cost-aware-demo cost-aware-test
+
 
 # Check a local package and all of its dependencies for errors
 # 
@@ -93,6 +95,20 @@ euclid-wasm:
 
 test :
 	cargo test --all-features
+
+# Run the cost-aware routing demo API used by the take-home assignment.
+#
+# Usage:
+#	make cost-aware-demo [port=9090]
+cost-aware-demo:
+	COST_AWARE_PORT=$(if $(port),$(port),9090) cargo run --quiet --offline --manifest-path tools/cost-aware-smoke/Cargo.toml --bin server
+
+# Run only the fast cost-aware routing tests.
+#
+# Usage:
+#	make cost-aware-test
+cost-aware-test:
+	cargo test --offline --manifest-path tools/cost-aware-smoke/Cargo.toml cost_aware
 
 
 # Next-generation test runner for Rust.

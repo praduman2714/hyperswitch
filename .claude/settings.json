@@ -1,0 +1,7 @@
+{
+  "project": "hyperswitch-cost-aware-routing",
+  "notes": [
+    "Keep the cost-aware routing slice small and runnable in under 10 minutes.",
+    "Prefer the demo API for evaluator verification because full Hyperswitch compilation is heavy on low-memory machines."
+  ]
+}

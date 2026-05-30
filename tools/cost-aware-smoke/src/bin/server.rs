@@ -7,8 +7,10 @@ mod cost_aware {
 
 use std::{
     collections::HashMap,
+    fs,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
+    path::PathBuf,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
@@ -17,6 +19,8 @@ use std::{
 
 use cost_aware::{select_connector, ConnectorCostConfig, CostRoutingConfig, RoutingDecision};
 use serde::{Deserialize, Serialize};
+
+const DEFAULT_CONFIG_PATH_FROM_MANIFEST: &str = "../../config/cost_routing.toml";
 
 #[derive(Debug, Deserialize)]
 struct CostAwareSelectRequest {
@@ -42,37 +46,36 @@ struct RoutingTraceResponse {
     all_candidates: Vec<cost_aware::RoutingCandidate>,
 }
 
-fn connector(
-    name: &str,
-    base_fee_usd: f64,
-    percent_fee: f64,
-    currencies: &[&str],
-    bin_prefixes: &[&str],
-) -> ConnectorCostConfig {
-    ConnectorCostConfig {
-        name: name.to_string(),
-        base_fee_usd,
-        percent_fee,
-        supported_currencies: currencies
-            .iter()
-            .map(|currency| currency.to_string())
-            .collect(),
-        supported_bin_prefixes: bin_prefixes
-            .iter()
-            .map(|prefix| prefix.to_string())
-            .collect(),
-    }
+#[derive(Debug, Deserialize)]
+struct CostRoutingFileConfig {
+    connectors: Vec<ConnectorCostConfig>,
+    settings: CostRoutingSettings,
 }
 
-fn cost_config() -> CostRoutingConfig {
-    CostRoutingConfig {
-        connectors: vec![
-            connector("stripe", 0.30, 0.029, &["USD", "EUR", "GBP"], &[]),
-            connector("razorpay", 0.00, 0.020, &["INR"], &["508", "607"]),
-            connector("adyen", 0.12, 0.025, &["USD", "EUR", "GBP", "INR"], &[]),
-        ],
-        min_success_rate: 0.80,
-    }
+#[derive(Debug, Deserialize)]
+struct CostRoutingSettings {
+    min_success_rate: f64,
+}
+
+fn config_path() -> PathBuf {
+    std::env::var("COST_ROUTING_CONFIG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(DEFAULT_CONFIG_PATH_FROM_MANIFEST)
+        })
+}
+
+fn load_cost_config() -> Result<CostRoutingConfig, String> {
+    let path = config_path();
+    let contents = fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    let file_config = toml::from_str::<CostRoutingFileConfig>(&contents)
+        .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+
+    Ok(CostRoutingConfig {
+        connectors: file_config.connectors,
+        min_success_rate: file_config.settings.min_success_rate,
+    })
 }
 
 fn response(status: &str, body: &str) -> String {
@@ -210,7 +213,14 @@ fn handle_connection(
         }
     };
 
-    let config = cost_config();
+    let config = match load_cost_config() {
+        Ok(config) => config,
+        Err(error) => {
+            let body = serde_json::json!({ "error": error }).to_string();
+            let _ = stream.write_all(response("500 Internal Server Error", &body).as_bytes());
+            return;
+        }
+    };
     let result = select_connector(
         &config,
         &payload.card_bin,
@@ -246,7 +256,7 @@ fn handle_connection(
 }
 
 fn main() {
-    let port = std::env::var("COST_AWARE_PORT").unwrap_or_else(|_| "9091".to_string());
+    let port = std::env::var("COST_AWARE_PORT").unwrap_or_else(|_| "9090".to_string());
     let address = format!("127.0.0.1:{port}");
     let listener = TcpListener::bind(&address).expect("server should bind to configured address");
     let trace_store = Arc::new(Mutex::new(HashMap::new()));
@@ -273,9 +283,42 @@ mod tests {
     use super::*;
     use cost_aware::RoutingError;
 
+    fn connector(
+        name: &str,
+        base_fee_usd: f64,
+        percent_fee: f64,
+        currencies: &[&str],
+        bin_prefixes: &[&str],
+    ) -> ConnectorCostConfig {
+        ConnectorCostConfig {
+            name: name.to_string(),
+            base_fee_usd,
+            percent_fee,
+            supported_currencies: currencies
+                .iter()
+                .map(|currency| currency.to_string())
+                .collect(),
+            supported_bin_prefixes: bin_prefixes
+                .iter()
+                .map(|prefix| prefix.to_string())
+                .collect(),
+        }
+    }
+
+    fn test_cost_config() -> CostRoutingConfig {
+        CostRoutingConfig {
+            connectors: vec![
+                connector("stripe", 0.30, 0.029, &["USD", "EUR", "GBP"], &[]),
+                connector("razorpay", 0.00, 0.020, &["INR"], &["508", "607"]),
+                connector("adyen", 0.12, 0.025, &["USD", "EUR", "GBP", "INR"], &[]),
+            ],
+            min_success_rate: 0.80,
+        }
+    }
+
     #[test]
     fn cost_aware_selects_stripe_when_adyen_is_below_success_floor() {
-        let decision = select_connector(&cost_config(), "424242", "USD", 100.0)
+        let decision = select_connector(&test_cost_config(), "424242", "USD", 100.0)
             .expect("USD should have an eligible connector");
 
         assert_eq!(decision.selected, "stripe");
@@ -288,7 +331,7 @@ mod tests {
 
     #[test]
     fn cost_aware_selects_razorpay_for_inr_matching_bin() {
-        let decision = select_connector(&cost_config(), "508999", "INR", 100.0)
+        let decision = select_connector(&test_cost_config(), "508999", "INR", 100.0)
             .expect("INR with 508 BIN should route");
 
         assert_eq!(decision.selected, "razorpay");
@@ -314,8 +357,20 @@ mod tests {
 
     #[test]
     fn cost_aware_returns_error_when_no_connector_supports_currency() {
-        let result = select_connector(&cost_config(), "424242", "JPY", 100.0);
+        let result = select_connector(&test_cost_config(), "424242", "JPY", 100.0);
 
         assert!(matches!(result, Err(RoutingError::NoEligibleConnector(_))));
+    }
+
+    #[test]
+    fn cost_aware_demo_config_loads_from_repo_toml() {
+        let config = load_cost_config().expect("repo cost_routing.toml should load");
+
+        assert_eq!(config.connectors.len(), 3);
+        assert!(config
+            .connectors
+            .iter()
+            .any(|connector| connector.name == "stripe"));
+        assert_eq!(config.min_success_rate, 0.80);
     }
 }

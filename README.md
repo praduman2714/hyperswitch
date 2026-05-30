@@ -1,30 +1,31 @@
 # Hyperswitch Cost-Aware Routing Fork
 
-This fork adds cost-aware connector routing: for a card BIN, currency, and USD amount, it estimates each eligible connector's cost using `base_fee_usd + (percent_fee * amount_in_usd)`, applies a minimum success-rate floor, selects the cheapest acceptable connector, and exposes the decision trace by payment ID.
+This fork adds one custom routing path to Hyperswitch: cost-aware connector selection. Given a card BIN, currency, and USD amount, it filters eligible connectors, estimates cost with `base_fee_usd + (percent_fee * amount_in_usd)`, applies a minimum success-rate floor, selects the cheapest acceptable connector, and stores a decision trace by payment ID.
 
 ## Quickstart
 
-The full Hyperswitch router is large to compile on a low-memory laptop, so this repo includes a small demo API that reuses the real routing logic from `crates/router/src/core/routing/cost_aware.rs` without compiling the whole router.
+Run the demo API from a fresh clone:
 
 ```bash
-cd tools/cost-aware-smoke
-COST_AWARE_PORT=9091 cargo run --quiet --offline --bin server
+make cost-aware-demo
 ```
 
 You should see:
 
 ```text
-Cost-aware demo API running at http://127.0.0.1:9091
+Cost-aware demo API running at http://127.0.0.1:9090
 POST /cost-aware/select
 GET  /v1/payments/{payment_id}/routing-trace
 ```
 
+This demo server reuses the real routing logic from `crates/router/src/core/routing/cost_aware.rs` and reads `config/cost_routing.toml`. It avoids compiling the full Hyperswitch router, which is heavy on low-memory machines.
+
 ## Test Payment
 
-This creates a test routing decision for payment `pay_test_123`. The BIN is `424242`, the currency is `USD`, and the amount is `$100.00`.
+Create a USD routing decision for payment `pay_test_123`:
 
 ```bash
-curl --location 'http://localhost:9091/cost-aware/select' \
+curl --location 'http://localhost:9090/cost-aware/select' \
 --header 'Content-Type: application/json' \
 --data '{
   "payment_id": "pay_test_123",
@@ -66,7 +67,7 @@ Example response:
 Fetch the stored decision trace for the same payment:
 
 ```bash
-curl --location 'http://localhost:9091/v1/payments/pay_test_123/routing-trace'
+curl --location 'http://localhost:9090/v1/payments/pay_test_123/routing-trace'
 ```
 
 Example response:
@@ -95,11 +96,15 @@ Example response:
 }
 ```
 
+There is also a Postman collection at `postman/cost-aware-routing.postman_collection.json`.
+
 ## Running The Tests
 
 ```bash
-cargo test --manifest-path tools/cost-aware-smoke/Cargo.toml cost_aware
+make cost-aware-test
 ```
+
+This runs the focused cost-aware tests and avoids compiling the full Hyperswitch router.
 
 ## Cost Config
 
