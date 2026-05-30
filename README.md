@@ -98,7 +98,7 @@ Example response:
 ## Running The Tests
 
 ```bash
-cargo test cost_aware
+cargo test --manifest-path tools/cost-aware-smoke/Cargo.toml cost_aware
 ```
 
 ## Cost Config

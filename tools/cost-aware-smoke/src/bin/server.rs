@@ -267,3 +267,55 @@ fn main() {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cost_aware::RoutingError;
+
+    #[test]
+    fn cost_aware_selects_stripe_when_adyen_is_below_success_floor() {
+        let decision = select_connector(&cost_config(), "424242", "USD", 100.0)
+            .expect("USD should have an eligible connector");
+
+        assert_eq!(decision.selected, "stripe");
+        assert_eq!(decision.reason, "lowest_cost");
+        assert!(decision.all_candidates.iter().any(|candidate| {
+            candidate.name == "adyen"
+                && candidate.excluded_reason.as_deref() == Some("below_success_rate_floor")
+        }));
+    }
+
+    #[test]
+    fn cost_aware_selects_razorpay_for_inr_matching_bin() {
+        let decision = select_connector(&cost_config(), "508999", "INR", 100.0)
+            .expect("INR with 508 BIN should route");
+
+        assert_eq!(decision.selected, "razorpay");
+        assert_eq!(decision.reason, "lowest_cost");
+    }
+
+    #[test]
+    fn cost_aware_falls_back_to_cheapest_when_all_are_below_floor() {
+        let config = CostRoutingConfig {
+            connectors: vec![
+                connector("local_one", 0.20, 0.030, &["USD"], &[]),
+                connector("local_two", 0.10, 0.020, &["USD"], &[]),
+            ],
+            min_success_rate: 0.95,
+        };
+
+        let decision = select_connector(&config, "424242", "USD", 100.0)
+            .expect("fallback should still select a connector");
+
+        assert_eq!(decision.selected, "local_two");
+        assert_eq!(decision.reason, "floor_fallback");
+    }
+
+    #[test]
+    fn cost_aware_returns_error_when_no_connector_supports_currency() {
+        let result = select_connector(&cost_config(), "424242", "JPY", 100.0);
+
+        assert!(matches!(result, Err(RoutingError::NoEligibleConnector(_))));
+    }
+}
