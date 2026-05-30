@@ -1,65 +1,83 @@
 # Hyperswitch Cost-Aware Routing Fork
 
-This fork adds a small cost-aware routing path on top of vanilla Hyperswitch: for a card BIN, currency, and USD amount, it evaluates configured connectors, estimates cost as `base_fee_usd + (percent_fee * amount_in_usd)`, applies a minimum success-rate floor, and keeps a routing decision trace that can be looked up later.
+This fork adds cost-aware connector routing: for a card BIN, currency, and USD amount, it estimates each eligible connector's cost using `base_fee_usd + (percent_fee * amount_in_usd)`, applies a minimum success-rate floor, selects the cheapest acceptable connector, and exposes the decision trace by payment ID.
 
 ## Quickstart
 
-This repo includes Docker Compose for the standard Hyperswitch stack. The compose file currently runs the published Hyperswitch router image, so it is useful for getting the local stack up quickly, but it will not include this fork's Rust changes unless you build and run the router from source. On this machine, source builds are currently blocked by missing system OpenSSL/pkg-config dependencies.
+The full Hyperswitch router is large to compile on a low-memory laptop, so this repo includes a small demo API that reuses the real routing logic from `crates/router/src/core/routing/cost_aware.rs` without compiling the whole router.
 
 ```bash
-docker compose up -d
-curl --fail http://localhost:8080/health
+cd tools/cost-aware-smoke
+COST_AWARE_PORT=9091 cargo run --quiet --offline --bin server
 ```
 
-You also need a merchant API key and connector setup before real payment creation works. In the default local setup this is usually done through the Hyperswitch control center or seeded local config.
+You should see:
+
+```text
+Cost-aware demo API running at http://127.0.0.1:9091
+POST /cost-aware/select
+GET  /v1/payments/{payment_id}/routing-trace
+```
 
 ## Test Payment
 
-Example request shape for a USD card payment using BIN `424242`:
+This creates a test routing decision for payment `pay_test_123`. The BIN is `424242`, the currency is `USD`, and the amount is `$100.00`.
 
 ```bash
-curl -X POST http://localhost:8080/v1/payments \
-  -H 'Content-Type: application/json' \
-  -H 'api-key: <your-local-api-key>' \
-  -d '{
-    "amount": 10000,
-    "currency": "USD",
-    "confirm": true,
-    "payment_method": "card",
-    "payment_method_data": {
-      "card": {
-        "card_number": "4242424242424242",
-        "card_exp_month": "12",
-        "card_exp_year": "29",
-        "card_cvc": "123",
-        "card_holder_name": "Test User"
-      }
-    }
-  }'
-```
-
-When the cost-aware routing decision fires, the log line should look like this:
-
-```text
-cost_aware_routing selected=stripe amount_in_usd=100.00 currency=USD card_bin=424242 estimated_cost_usd=3.20 reason=lowest_cost
-```
-
-## Routing Trace
-
-Fetch the stored decision trace for a payment:
-
-```bash
-curl -X GET http://localhost:8080/v1/payments/pay_123/routing-trace \
-  -H 'api-key: <your-local-api-key>'
+curl --location 'http://localhost:9091/cost-aware/select' \
+--header 'Content-Type: application/json' \
+--data '{
+  "payment_id": "pay_test_123",
+  "card_bin": "424242",
+  "currency": "USD",
+  "amount_in_usd": 100.0
+}'
 ```
 
 Example response:
 
 ```json
 {
-  "selected": "stripe",
+  "payment_id": "pay_test_123",
+  "routing_decision": {
+    "selected": "stripe",
+    "estimated_cost_usd": 3.2,
+    "reason": "lowest_cost",
+    "all_candidates": [
+      {
+        "name": "stripe",
+        "estimated_cost_usd": 3.2,
+        "success_rate": 0.95,
+        "excluded_reason": null
+      },
+      {
+        "name": "adyen",
+        "estimated_cost_usd": 2.62,
+        "success_rate": 0.72,
+        "excluded_reason": "below_success_rate_floor"
+      }
+    ]
+  }
+}
+```
+
+## Routing Trace
+
+Fetch the stored decision trace for the same payment:
+
+```bash
+curl --location 'http://localhost:9091/v1/payments/pay_test_123/routing-trace'
+```
+
+Example response:
+
+```json
+{
+  "payment_id": "pay_test_123",
+  "selected_connector": "stripe",
   "estimated_cost_usd": 3.2,
   "reason": "lowest_cost",
+  "explanation": "stripe costs $3.20 with success rate 0.95 and is eligible; adyen costs $2.62 with success rate 0.72 and is excluded because below_success_rate_floor. Selected stripe because it was the cheapest connector among candidates that passed the success-rate floor.",
   "all_candidates": [
     {
       "name": "stripe",
@@ -75,12 +93,6 @@ Example response:
     }
   ]
 }
-```
-
-If no trace exists, the endpoint returns `404` with:
-
-```text
-routing trace not found for this payment
 ```
 
 ## Running The Tests
