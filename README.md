@@ -96,6 +96,37 @@ Example response:
 }
 ```
 
+## Razorpay INR Example
+
+Razorpay is selected when the currency is `INR` and the BIN starts with one of its configured prefixes, such as `508`.
+
+```bash
+curl --location 'http://localhost:9090/cost-aware/select' \
+--header 'Content-Type: application/json' \
+--data '{
+  "payment_id": "pay_test_inr_508",
+  "card_bin": "508999",
+  "currency": "INR",
+  "amount_in_usd": 100.0
+}'
+```
+
+Trace the Razorpay decision:
+
+```bash
+curl --location 'http://localhost:9090/v1/payments/pay_test_inr_508/routing-trace'
+```
+
+Expected selected connector:
+
+```json
+{
+  "selected_connector": "razorpay",
+  "estimated_cost_usd": 2.0,
+  "reason": "lowest_cost"
+}
+```
+
 There is also a Postman collection at `postman/cost-aware-routing.postman_collection.json`.
 
 ## Running The Tests
